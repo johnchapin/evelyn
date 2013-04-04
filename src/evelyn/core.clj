@@ -1,101 +1,69 @@
 (ns evelyn.core
-  (:require [clojure.tools.logging :as log]))
+  (:import [org.joda.time DateTime])
+  (:require [evelyn.fitness.ts-buy-sell-stop :as trade-series]
+            [evelyn.init]
+            [evelyn.models.result :as result]
+            [evelyn.models.bid-ask-spread :as bid-ask-spread]
+            [evelyn.tick-processor.yahoo :as yahoo]
+            [evelyn.tick-series :as tick-series]
 
-(def ^{:dynamic true} swarm-size 30)
+            [pso.swarm]
+            [pso.dimension]
 
-;(def swarm (atom nil))
+            [clojure.tools.logging :as log]
+            ))
 
-(defrecord Dimension [tag minimum maximum])
-(defrecord Particle [velocity current-value current-position best-value best-position])
-(defrecord Swarm [fitness-fn dimensions particles best-particle])
+(defn init! []
+  @(delay (evelyn.init/init!)))
 
-(defn- v+ [& vs] (apply mapv + vs))
+(defn optimize-trade-series [symbol & {:keys [starting-capital capital-pct
+                                              transaction-fee swarm-size generations
+                                              days]
+                                       :or {starting-capital 5000.0
+                                            capital-pct 1.0
+                                            transaction-fee 0.0
+                                            swarm-size 30
+                                            generations 100
+                                            days 30}}]
 
-(defn- v- [& vs] (apply mapv - vs))
+  (let [time-to (-> (DateTime.) .getMillis)
+        time-from (-> (DateTime. time-to)
+                      (.minusDays ,,, days)
+                      .getMillis)]
 
-(defn- fv* [f v] (vec (map (partial * f) v)))
+    (log/info :time-from time-from :time-to time-to)
 
-(defn- rand-bounded [dimension]
-  (* (rand) (- (:maximum dimension) (:minimum dimension))))
+    (init!)
 
-(defn- get-value [fitness-fn position]
-  (apply fitness-fn position))
+    (when-let [tick-series (tick-series/factory symbol time-from time-to)]
 
-(defn- best [particles]
-  (reduce
-    (fn [bp p]
-      (if (or (nil? bp)
-              (< 0 (:best-value p) (:best-value bp)))
-        p
-        bp))
-    nil
-    particles))
+      (log/info (str tick-series))
 
-(let [acceleration-coef 0.999
-      particle-position-coef 1.5
-      swarm-position-coef 1.5]
+      (let [open-high-spreads (sort
+                                (map (fn [[k v]]
+                                       (let [day-open (:open (first v))
+                                             day-high (reduce max (map :high v))]
+                                         (- day-high day-open)))
+                                     (:ticks tick-series)))
 
-  (defn- update-velocity [swarm particle]
-    (let [particle-position-coef* (* (rand) particle-position-coef)
-          swarm-position-coef*    (* (rand) swarm-position-coef)
-          v1 (fv* acceleration-coef
-                  (:velocity particle))
-          v2 (fv* particle-position-coef*
-                  (v- (:best-position particle)
-                      (:current-position particle)))
-          v3 (fv* swarm-position-coef*
-                  (v- (:best-position (:best-particle swarm))
-                      (:current-position particle)))]
-      (v+ v1 v2 v3))))
+            median-idx (int (/ (count open-high-spreads) 2))
+            median-high-open-spread (get (vec open-high-spreads) median-idx)
 
-(defn- constrain-position [dimensions position]
-  (->> position
-      (mapv min (map :maximum dimensions) ,,,)
-      (mapv max (map :minimum dimensions) ,,,)))
+            ba-spread (or (bid-ask-spread/get symbol) 0.0)
 
-(defn- update-particle [swarm particle]
-  (let [new-velocity (update-velocity swarm particle)
-        new-position (constrain-position
-                       (:dimensions swarm)
-                       (v+ (:current-position particle)
-                           new-velocity))
-        ;; TODO: Make sure position doesn't exceed bounds for each dimension
-        new-value (get-value (:fitness-fn swarm) new-position)
-        [best-value best-position] (if (< 0 new-value (:best-value particle))
-                                     [new-value new-position]
-                                     [(:best-value particle) (:best-position particle)])]
-    ;(->Particle new-velocity new-value new-position best-value best-position)))
-    (assoc particle
-           :velocity new-velocity
-           :current-value new-value
-           :current-position new-position
-           :best-value best-value
-           :best-position best-position)))
+            fitness-fn (partial trade-series/fit starting-capital capital-pct transaction-fee ba-spread tick-series)
 
-(defn- particle-factory [fitness-fn dimensions]
-  (let [velocity (vec (repeat (count dimensions) 0.0))
-        current-position (map rand-bounded dimensions)
-        current-value (get-value fitness-fn current-position)
-        best-position current-position
-        best-value current-value]
-  (->Particle velocity current-value current-position best-value best-position)))
+            dimensions [(pso.dimension/build :buy 0.0 median-high-open-spread)
+                        (pso.dimension/build :sell (+ 0.01 median-high-open-spread) (* 2 median-high-open-spread))
+                        (pso.dimension/build :stop (* -1 median-high-open-spread) median-high-open-spread)]
 
-(defn swarm-factory [fitness-fn size dimensions]
-  (let [particles (repeatedly size (partial particle-factory fitness-fn dimensions))
-        best-particle (best particles)]
-    (log/info "Added " (count particles) " particle(s) to swarm...")
-    (->Swarm fitness-fn dimensions particles best-particle)))
+            swarm (atom (pso.swarm/build dimensions fitness-fn trade-series/compare-results swarm-size))]
 
-(defn- update-swarm [swarm]
-  (let [particles (map (partial update-particle swarm) (:particles swarm))
-        best-particle (best particles)]
-    (->Swarm (:fitness-fn swarm) (:dimensions swarm) particles best-particle)))
-    ;(assoc swarm :particles particles :best-particle best-particle)))
+        (vec (repeatedly generations #(swap! swarm pso.swarm/update)))
+        (result/add (:value (:result (:best-particle @swarm))))))))
 
-(defn learn [swarm generations]
-  (let [swarm* (update-swarm swarm)]
-    ;(log/info swarm*)
-    (log/info generations (:best-particle swarm*))
-    (if (zero? generations)
-      (:best-particle swarm*)
-      (recur swarm* (dec generations)))))
+(defn go [& args]
+  (let [symbol-data (slurp (clojure.java.io/resource "nasdaq.100.symbols"))
+        symbols (map keyword (clojure.string/split symbol-data #" "))]
+    (for [symbol symbols]
+      (apply optimize-trade-series symbol args))))
