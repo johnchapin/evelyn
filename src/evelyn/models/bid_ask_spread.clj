@@ -2,7 +2,7 @@
   (:import [org.joda.time DateTime DateTimeZone])
   (:refer-clojure :exclude [get])
   (:require [evelyn.entities :as entities]
-            [evelyn.tick-processor.yahoo :as yahoo]
+            [evelyn.spread-processor.yahoo :as yahoo]
             [clojure.tools.logging :as log]
             [korma.core :refer :all]
             [korma.db :refer :all]))

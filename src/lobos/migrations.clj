@@ -8,7 +8,7 @@
             [lobos.schema :refer :all]))
 
 (defn init! []
-  ; Bit of a hack to re-use a connection for Korma for Lobos migrations...
+  ; Bit of a hack to re-use a connection from Korma for Lobos migrations...
   (korma.db/defdb db evelyn.config/db)
   (swap! lobos.connectivity/global-connections assoc
          :default-connection {:connection (korma.db/get-connection @korma.db/_default)

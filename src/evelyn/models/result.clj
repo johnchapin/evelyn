@@ -4,16 +4,17 @@
             [korma.core :refer :all]
             [korma.db :refer :all]))
 
-(defn add [result]
-  (transaction
-    (try
-      (when-let [result-id (val (first (insert entities/results (values result))))]
-        (let [trades (map #(assoc % :result-id result-id) (:trades result))]
-          (insert entities/trades (values trades))))
-      (catch java.sql.SQLException e
-        (rollback)
-        (let [[short-message & _] (clojure.string/split (.getMessage e) #";")]
-          (log/warn :add short-message))))))
+(defn add [{:keys [trades] :as result}]
+  (when-not (empty? trades)
+    (transaction
+      (try
+        (when-let [result-id (val (first (insert entities/results (values result))))]
+          (let [trades* (map #(assoc % :result-id result-id) trades)]
+            (insert entities/trades (values trades*))))
+        (catch java.sql.SQLException e
+          (rollback)
+          (let [[short-message & _] (clojure.string/split (.getMessage e) #";")]
+            (log/warn :add short-message)))))))
 
 ;(pp/pprint
   ;(korma.core/select

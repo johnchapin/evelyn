@@ -1,4 +1,5 @@
 (ns evelyn.tick-processor.google
+  (:refer-clojure :exclude [new])
   (:import [org.joda.time DateTime DateTimeZone])
   (:require [evelyn.tick-processor]
             [clojure.java.io :as jio]
@@ -19,7 +20,6 @@
         timezone-offset-minutes* (parse-header-line-long timezone-offset-minutes)
         timezone-offset-seconds (* 60 timezone-offset-minutes*)
         running-millis (atom 0)
-        ;trading-day (atom nil)
         ]
     ;; DATE,CLOSE,HIGH,LOW,OPEN,VOLUME
     ;; 1363354200,437.99,438.32,437.8,437.93,2257435
@@ -36,22 +36,32 @@
             tick-time (DateTime. tick-millis DateTimeZone/UTC)]
         (apply evelyn.tick-processor/->Tick tick-time (map #(Double/parseDouble %) nums*))))))
 
-(defrecord GoogleTickProcessor []
-  evelyn.tick-processor/TickProcessor
-
-  (canDownload? [_ symbol]
-    true)
-
-  (canProcess? [_ file]
-    true)
-
-  (download [_ symbol]
-    (let [url-fmt "https://www.google.com/finance/getprices?i=60&p=365d&f=d,o,h,l,c,v&df=cpct&q=%s"
-          url (format url-fmt (name symbol))
+(let [url-fmt (str "https://www.google.com/finance/"
+                   "getprices?i=60&p=365d&f=d,o,h,l,c,v&df=cpct&q=%s")]
+  (defn- fetch-raw [symbol]
+    (let [url (format url-fmt (name symbol))
           raw (slurp url)]
       (map #(assoc % :symbol symbol)
-           (process-raw raw))))
+           (process-raw raw)))))
 
+(defn- fetch-and-process [symbol]
+  (map #(assoc % :symbol symbol)
+       (-> symbol
+           fetch-raw
+           process-raw)))
+
+(deftype GoogleTickProcessor []
+  evelyn.tick-processor/TickProcessor
+  (canDownload? [_ symbol]
+    true)
+  (canProcess? [_ file]
+    true)
+  (download [_ symbol]
+    (fetch-and-process symbol))
   (process [_ file]
     (when-let [raw (slurp file)]
       (process-raw raw))))
+
+(defn new []
+  (GoogleTickProcessor.))
+

@@ -1,13 +1,17 @@
 # evelyn
 
-A Clojure library designed to ... well, that part is up to you.
+A stock market backtesting application. Inspired by [Bateman](https://github.com/fearofcode/bateman).
 
 ## Usage
 
-FIXME
+```clojure
+(require '[evelyn.core])
+
+(evelyn.core/go)
+```
 
 ## License
 
-Copyright © 2013 FIXME
+Copyright © 2013 Johnathan Chapin
 
 Distributed under the Eclipse Public License, the same as Clojure.

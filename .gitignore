@@ -11,5 +11,6 @@ pom.xml.asc
 .lein-plugins
 .lein-repl-history
 .lobos_stash.clj
+/resources/data
 /resources/data.h2.db
 /resources/data.trace.db

@@ -1,5 +1,4 @@
 (ns evelyn.config)
-  ;(:require [korma.db :refer :all]))
 
 (def symbol-filename "nasdaq.100.symbols")
 

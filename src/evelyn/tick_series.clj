@@ -10,8 +10,8 @@
     (format "%s [%s -> %s] [%d days, %d ticks] [%f %f %f]"
             symbol begin end (count ticks) (reduce + (map count (vals ticks))) open high close)))
 
-(defn factory [symbol datetime-from datetime-to]
-  (let [distinct-ticks (tick/load symbol datetime-from datetime-to)
+(defn factory [symbol time-from time-to]
+  (let [distinct-ticks (tick/load symbol time-from time-to)
         ticks (group-by #(DateMidnight. (:time %) DateTimeZone/UTC) distinct-ticks)
         ;; Add {:last ...} metadata to each tick vector, to ease 'last?' processing later
         ticks* (into (sorted-map)
