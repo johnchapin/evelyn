@@ -7,7 +7,7 @@ A stock market backtesting application. Inspired by [Bateman](https://github.com
 ```clojure
 (require '[evelyn.core])
 
-(evelyn.core/go)
+(evelyn.core/-main)
 ```
 
 ## License
