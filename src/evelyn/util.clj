@@ -39,8 +39,9 @@
       bigdec
       (.setScale ,,, 2 BigDecimal/ROUND_HALF_UP)))
 
-(defn clob-to-string [clob]
+(defn clob-to-string
   "Turn a JDBC Clob into a String"
+  [clob]
   (with-open [rdr (java.io.BufferedReader. (.getCharacterStream clob))]
     (apply str (line-seq rdr))))
 

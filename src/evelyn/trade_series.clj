@@ -10,37 +10,41 @@
             [pso.swarm])
   (:import [org.joda.time DateTime]))
 
-(defn- build-to-from [days]
+(defn- build-to-from
   "Given a positive number of days, returns a tuple of millisecond
   values representing [now, now - days]."
+  [days]
   ^{:pre [pos? days]}
   (let [now (DateTime.)]
     [(.getMillis now)
      (.getMillis (.minusDays now days))]))
 
-(defn- build-spreads [{ticks :ticks}]
+(defn- build-spreads
   "Given a tick series, returns a list of the daily open/high spreads."
+  [{ticks :ticks}]
   (sort (map (fn [[_ day-ticks]]
                (let [day-open (:open (first day-ticks))
                      day-high (reduce max (map :high day-ticks))]
                  (- day-high day-open)))
              ticks)))
 
-(defn- build-dimensions [buy-min buy-max sell-min sell-max stop-min stop-max]
+(defn- build-dimensions
   "Given pairs of min/max values, returns a list of pso.dimensions
   representing buy, stop, and sell."
+  [buy-min buy-max sell-min sell-max stop-min stop-max]
   [(pso.dimension/build :buy buy-min buy-max)
    (pso.dimension/build :sell sell-min sell-max)
    (pso.dimension/build :stop stop-min stop-max)])
 
-(defn optimize [symbol & {:keys [starting-capital capital-pct
-                                 transaction-fee swarm-size generations
-                                 days]
-                          :or {starting-capital 5000.0 capital-pct 1.0
-                               transaction-fee 0.0 swarm-size 30
-                               generations 100 days 30}}]
+(defn optimize
   "Given a symbol, optimizes buy/sell/stop signals over the given
   (or default) time period."
+  [symbol & {:keys [starting-capital capital-pct
+                    transaction-fee swarm-size generations
+                    days]
+             :or {starting-capital 5000.0 capital-pct 1.0
+                  transaction-fee 0.0 swarm-size 30
+                  generations 100 days 30}}]
 
   (evelyn.store/init!)
 
